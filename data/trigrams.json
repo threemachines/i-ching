@@ -1,0 +1,74 @@
+{
+  "CH_IEN": {
+    "name": "CH_IEN",
+    "chinese": "乾",
+    "unicode": "☰",
+    "symbolic": "THE CREATIVE",
+    "element": "HEAVEN",
+    "attribute": "strong",
+    "lines": "111"
+  },
+  "K_UN": {
+    "name": "K_UN", 
+    "chinese": "坤",
+    "unicode": "☷",
+    "symbolic": "THE RECEPTIVE",
+    "element": "EARTH",
+    "attribute": "devoted",
+    "lines": "000"
+  },
+  "CHEN": {
+    "name": "CHEN",
+    "chinese": "震", 
+    "unicode": "☳",
+    "symbolic": "THE AROUSING",
+    "element": "THUNDER",
+    "attribute": "inciting movement",
+    "lines": "001"
+  },
+  "K_AN": {
+    "name": "K_AN",
+    "chinese": "坎",
+    "unicode": "☵",
+    "symbolic": "THE ABYSMAL", 
+    "element": "WATER",
+    "attribute": "dangerous",
+    "lines": "010"
+  },
+  "KEN": {
+    "name": "KEN",
+    "chinese": "艮",
+    "unicode": "☶",
+    "symbolic": "KEEPING STILL",
+    "element": "MOUNTAIN", 
+    "attribute": "resting",
+    "lines": "100"
+  },
+  "SUN": {
+    "name": "SUN",
+    "chinese": "巽",
+    "unicode": "☴",
+    "symbolic": "THE GENTLE",
+    "element": "WIND",
+    "attribute": "penetrating",
+    "lines": "011"
+  },
+  "LI": {
+    "name": "LI", 
+    "chinese": "離",
+    "unicode": "☲",
+    "symbolic": "THE CLINGING",
+    "element": "FIRE",
+    "attribute": "light-giving",
+    "lines": "101"
+  },
+  "TUI": {
+    "name": "TUI",
+    "chinese": "兌", 
+    "unicode": "☱",
+    "symbolic": "THE JOYOUS",
+    "element": "LAKE",
+    "attribute": "joyful",
+    "lines": "110"
+  }
+}

@@ -1,0 +1,379 @@
+use jsonrpc_core::{Error as JsonRpcError, IoHandler, Params, Result as JsonRpcResult, Value};
+use jsonrpc_stdio_server::ServerBuilder;
+use serde_json::json;
+use std::sync::Arc;
+
+use i_ching::core::data::IChingData;
+use i_ching::{Diviner, Reading};
+
+fn main() {
+    // Load I Ching data at startup
+    let data = Arc::new(IChingData::load().expect("Failed to load I Ching data files"));
+
+    let mut io = IoHandler::default();
+
+    // MCP initialization
+    io.add_method("initialize", |_params: Params| async {
+        Ok(json!({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {
+                "tools": {}
+            },
+            "serverInfo": {
+                "name": "i-ching",
+                "version": env!("CARGO_PKG_VERSION"),
+                "description": "I Ching divination with Wilhelm-Baynes translation. Cast hexagrams and interpret readings using the complete classical text.",
+                // below divination procedures derived from John Minford's delightful translation
+                "instructions": "This MCP provides I Ching divination tools. When a user asks asks for divination or an I Ching reading: 1) Use cast_hexagram to generate a reading, 2) Use interpret_reading to get the Wilhelm-Baynes text, 3) Interpret the ancient wisdom in context of the user's modern situation. The hexagram meanings are timeless - your role is to bridge the classical wisdom to contemporary application. You are in a quiet and receptive state of mind, and you are approaching the Divination with Sincerity and Good Faith. Attempt to ensure the user has already formulated their question, if they have not already relayed it to you."
+            }
+        }))
+    });
+
+    // List available tools
+    io.add_method("tools/list", |_params: Params| async {
+        Ok(json!({
+            "tools": [
+                {
+                    "name": "cast_hexagram",
+                    "description": "Cast a hexagram for I Ching divination using the three coins method",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "lines": {
+                                "type": "array",
+                                "items": {
+                                    "type": "integer",
+                                    "minimum": 6,
+                                    "maximum": 9
+                                },
+                                "minItems": 6,
+                                "maxItems": 6,
+                                "description": "Optional: specify exact line values (6,7,8,9) instead of random casting"
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "interpret_reading",
+                    "description": "Get detailed interpretation of a hexagram reading",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "hexagram": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 64,
+                                "description": "Primary hexagram number (1-64)"
+                            },
+                            "changing_lines": {
+                                "type": "array",
+                                "items": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 6
+                                },
+                                "description": "Positions of changing lines (1-6)"
+                            },
+                            "transformed_hexagram": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 64,
+                                "description": "Transformed hexagram number if there are changing lines"
+                            }
+                        },
+                        "required": ["hexagram"]
+                    }
+                }
+            ]
+        }))
+    });
+
+    // Cast hexagram tool
+    let data_clone = Arc::clone(&data);
+    io.add_method("tools/call", move |params: Params| {
+        let data = Arc::clone(&data_clone);
+        async move {
+            let params = params
+                .parse::<Value>()
+                .map_err(|e| JsonRpcError::invalid_params(format!("Invalid params: {}", e)))?;
+
+            let tool_name = params["name"]
+                .as_str()
+                .ok_or_else(|| JsonRpcError::invalid_params("Missing tool name"))?;
+
+            match tool_name {
+                "cast_hexagram" => handle_cast_hexagram(params, &data).await,
+                "interpret_reading" => handle_interpret_reading(params, &data).await,
+                _ => Err(JsonRpcError::method_not_found()),
+            }
+        }
+    });
+
+    let server = ServerBuilder::new(io).build();
+
+    // Use tokio to run the server
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(server);
+}
+
+async fn handle_cast_hexagram(params: Value, data: &Arc<IChingData>) -> JsonRpcResult<Value> {
+    let args = &params["arguments"];
+
+    let mut diviner = Diviner::new();
+
+    let reading = if let Some(lines_array) = args["lines"].as_array() {
+        // Cast from specific line numbers
+        if lines_array.len() != 6 {
+            return Err(JsonRpcError::invalid_params(
+                "Must provide exactly 6 line numbers",
+            ));
+        }
+
+        let mut lines = [7u8; 6];
+        for (i, line_val) in lines_array.iter().enumerate() {
+            let num = line_val
+                .as_u64()
+                .ok_or_else(|| JsonRpcError::invalid_params("Line values must be numbers"))?;
+
+            if num < 6 || num > 9 {
+                return Err(JsonRpcError::invalid_params(
+                    "Line values must be 6, 7, 8, or 9",
+                ));
+            }
+
+            lines[i] = num as u8;
+        }
+
+        diviner
+            .cast_reading_from_numbers(lines, None)
+            .map_err(|e| JsonRpcError::invalid_params(format!("Invalid line numbers: {}", e)))?
+    } else {
+        diviner.cast_reading(None)
+    };
+
+    let transformed = reading.transformed_hexagram();
+
+    Ok(json!({
+        "content": [
+            {
+                "type": "text",
+                "text": format_reading_for_goose(&reading, transformed.as_ref(), data)
+            }
+        ]
+    }))
+}
+
+async fn handle_interpret_reading(params: Value, data: &Arc<IChingData>) -> JsonRpcResult<Value> {
+    let args = &params["arguments"];
+
+    let hexagram_num = args["hexagram"]
+        .as_u64()
+        .ok_or_else(|| JsonRpcError::invalid_params("Missing hexagram number"))?;
+
+    if hexagram_num < 1 || hexagram_num > 64 {
+        return Err(JsonRpcError::invalid_params(
+            "Hexagram number must be between 1 and 64",
+        ));
+    }
+
+    let changing_lines = args["changing_lines"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_u64().map(|n| n as u8))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    let transformed_hexagram = args["transformed_hexagram"].as_u64().map(|n| n as u8);
+
+    let interpretation = format_interpretation(
+        hexagram_num as u8,
+        &changing_lines,
+        transformed_hexagram,
+        data,
+    );
+
+    Ok(json!({
+        "content": [
+            {
+                "type": "text",
+                "text": interpretation
+            }
+        ]
+    }))
+}
+
+fn format_reading_for_goose(
+    reading: &Reading,
+    transformed: Option<&Reading>,
+    data: &Arc<IChingData>,
+) -> String {
+    let mut result = String::new();
+
+    let hexagram_num = reading.primary_hexagram();
+    result.push_str(&format!("**Primary Hexagram:** {}", hexagram_num));
+
+    // Add hexagram name and details from Wilhelm data
+    if let Some(hexagram) = data.get_hexagram(hexagram_num) {
+        result.push_str(&format!(" - {} ({})\n", hexagram.name, hexagram.chinese));
+        result.push_str(&format!("**Unicode:** {}\n", hexagram.unicode));
+        result.push_str(&format!("**Pinyin:** {}\n\n", hexagram.pinyin));
+
+        // Add trigram information
+        if let Some(upper_trigram) = data.get_trigram(&hexagram.upper_trigram) {
+            result.push_str(&format!(
+                "**Upper Trigram:** {} {} - {} ({})\n",
+                upper_trigram.unicode,
+                upper_trigram.name,
+                upper_trigram.symbolic,
+                upper_trigram.element
+            ));
+        }
+        if let Some(lower_trigram) = data.get_trigram(&hexagram.lower_trigram) {
+            result.push_str(&format!(
+                "**Lower Trigram:** {} {} - {} ({})\n\n",
+                lower_trigram.unicode,
+                lower_trigram.name,
+                lower_trigram.symbolic,
+                lower_trigram.element
+            ));
+        }
+    } else {
+        result.push_str("\n\n");
+    }
+
+    // Visual representation
+    result.push_str("**Lines:**\n```\n");
+    for (i, line) in reading.lines.iter().enumerate().rev() {
+        result.push_str(&format!("{}: {}\n", i + 1, line.to_symbol()));
+    }
+    result.push_str("```\n\n");
+
+    if reading.has_changing_lines() {
+        result.push_str(&format!(
+            "**Changing Lines:** {:?}\n",
+            reading.changing_line_positions()
+        ));
+
+        if let Some(transformed) = transformed {
+            let transformed_num = transformed.primary_hexagram();
+            result.push_str(&format!("**Transforms to Hexagram:** {}", transformed_num));
+            if let Some(transformed_hex) = data.get_hexagram(transformed_num) {
+                result.push_str(&format!(
+                    " - {} ({})",
+                    transformed_hex.name, transformed_hex.chinese
+                ));
+            }
+            result.push_str("\n\n");
+        }
+    }
+
+    result.push_str(&format!(
+        "**Traditional Numbers:** {:?}\n\n",
+        reading.traditional_numbers()
+    ));
+
+    result.push_str(
+        "*Use the `interpret_reading` tool for detailed Wilhelm-Baynes meanings and guidance.*",
+    );
+
+    result
+}
+
+fn format_interpretation(
+    hexagram: u8,
+    changing_lines: &[u8],
+    transformed_hexagram: Option<u8>,
+    data: &Arc<IChingData>,
+) -> String {
+    let mut result = String::new();
+
+    // Get hexagram data
+    if let Some(hex_data) = data.get_hexagram(hexagram) {
+        result.push_str(&format!(
+            "# Hexagram {} - {} ({})\n\n",
+            hexagram, hex_data.name, hex_data.chinese
+        ));
+        result.push_str(&format!(
+            "**Unicode:** {} **Pinyin:** {}\n\n",
+            hex_data.unicode, hex_data.pinyin
+        ));
+
+        // Add trigram information
+        if let Some(upper_trigram) = data.get_trigram(&hex_data.upper_trigram) {
+            result.push_str(&format!(
+                "**Upper Trigram:** {} {} - {} ({})\n",
+                upper_trigram.unicode,
+                upper_trigram.name,
+                upper_trigram.symbolic,
+                upper_trigram.element
+            ));
+        }
+        if let Some(lower_trigram) = data.get_trigram(&hex_data.lower_trigram) {
+            result.push_str(&format!(
+                "**Lower Trigram:** {} {} - {} ({})\n\n",
+                lower_trigram.unicode,
+                lower_trigram.name,
+                lower_trigram.symbolic,
+                lower_trigram.element
+            ));
+        }
+
+        // Description
+        result.push_str("## Description\n\n");
+        result.push_str(&hex_data.description);
+        result.push_str("\n\n");
+
+        // Judgment
+        result.push_str("## The Judgment\n\n");
+        result.push_str(&format!("**{}**\n\n", hex_data.judgment.text));
+        result.push_str(&hex_data.judgment.commentary);
+        result.push_str("\n\n");
+
+        // Image
+        result.push_str("## The Image\n\n");
+        result.push_str(&format!("*{}*\n\n", hex_data.image.text));
+        result.push_str(&hex_data.image.commentary);
+        result.push_str("\n\n");
+
+        // Changing lines
+        if !changing_lines.is_empty() {
+            result.push_str("## Changing Lines\n\n");
+            for &line_pos in changing_lines {
+                if let Some(line_interp) = data.get_line_interpretation(hexagram, line_pos) {
+                    let position_label = if line_pos == 6 {
+                        "Top".to_string()
+                    } else {
+                        format!("Position {}", line_pos)
+                    };
+                    result.push_str(&format!("### Line {} ({})\n\n", line_pos, position_label));
+                    result.push_str(&format!("**{}**\n\n", line_interp.text));
+                    result.push_str(&line_interp.comments);
+                    result.push_str("\n\n");
+                }
+            }
+        }
+
+        // Transformation
+        if let Some(transformed_num) = transformed_hexagram {
+            if let Some(transformed_hex) = data.get_hexagram(transformed_num) {
+                result.push_str("## Transformation\n\n");
+                result.push_str(&format!(
+                    "When the changing lines transform, this hexagram becomes:\n\n"
+                ));
+                result.push_str(&format!(
+                    "**Hexagram {} - {} ({})**\n\n",
+                    transformed_num, transformed_hex.name, transformed_hex.chinese
+                ));
+                result.push_str(&format!("*{}*\n\n", transformed_hex.judgment.text));
+                result.push_str("This transformation suggests the natural progression and outcome of the current situation.\n\n");
+            }
+        }
+    } else {
+        result.push_str(&format!("**Hexagram {} Interpretation**\n\n", hexagram));
+        result.push_str("*Hexagram data not found.*\n\n");
+    }
+
+    result
+}
