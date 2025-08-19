@@ -8,7 +8,7 @@ pub struct Diviner {
 impl Diviner {
     pub fn new() -> Self {
         Self {
-            rng: rand::thread_rng(),
+            rng: rand::rng(),
         }
     }
 
@@ -49,7 +49,7 @@ impl Diviner {
     /// See `number_to_line` for probability details.
     fn cast_line(&mut self) -> Line {
         let coin_sum: u8 = (0..3)
-            .map(|_| if self.rng.gen_bool(0.5) { 3 } else { 2 })
+            .map(|_| if self.rng.random_bool(0.5) { 3 } else { 2 })
             .sum();
 
         Self::number_to_line(coin_sum)

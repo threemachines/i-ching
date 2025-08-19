@@ -25,7 +25,7 @@ A [Goose](https://block.github.io/goose/)-friendly MCP server for I Ching divina
 
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust 1.85.1 or later (for 2024 edition support)
 - Cargo (included with Rust)
 
 ### Building
