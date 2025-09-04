@@ -29,7 +29,12 @@ A [Goose](https://block.github.io/goose/)-friendly MCP server for I Ching divina
 - Cargo (included with Rust)
 
 ### Building
-#### Building & Installing with Cargo (recommended)
+#### Installing with crates.io (recommended)
+```bash
+cargo install i-ching
+```
+
+#### Building & Installing with Cargo
 
 For system-wide installation:
 
@@ -53,7 +58,7 @@ cargo build --release
 Binaries will be in your `./target/release/` directory.
 
 ### Binaries
-Either method creates two binaries:
+Any of the above methods creates two binaries:
 - `i-ching` - CLI tool
 - `i-ching-mcp-server` - MCP server for Goose
 
