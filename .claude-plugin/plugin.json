@@ -1,0 +1,11 @@
+{
+  "name": "i-ching",
+  "description": "I Ching divination with Wilhelm-Baynes translation using traditional three coins method",
+  "version": "1.0.0",
+  "author": {
+    "name": "threemachines"
+  },
+  "homepage": "https://github.com/threemachines/i-ching",
+  "repository": "https://github.com/threemachines/i-ching",
+  "license": "MIT"
+}

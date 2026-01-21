@@ -1,6 +1,6 @@
 # I Ching Divination
 
-A [Goose](https://block.github.io/goose/)-friendly MCP server for I Ching divination (Wilhelm-Baynes translation), plus a command-line utility version.
+An MCP server for I Ching divination (Wilhelm-Baynes translation), compatible with [Goose](https://block.github.io/goose/), [Claude Code](https://github.com/anthropics/claude-code), and other MCP clients, plus a command-line utility.
 
 ## Screenshots  
 ## Claude Sonnet 4
@@ -16,53 +16,84 @@ A [Goose](https://block.github.io/goose/)-friendly MCP server for I Ching divina
 
 - **Three coins method** divination following traditional practices
 - **Wilhelm-Baynes translation** with complete hexagram meanings, judgments, and line interpretations
-- **Multiple interfaces**: CLI tool, MCP server, and Goose extension
+- **Multiple interfaces**: CLI tool, MCP server for Goose, Claude Code, and other MCP-compatible clients
 - **Flexible input formats**: hexagram numbers, Unicode characters, line numbers, or changing hexagram notation
 - **Rich output formats**: brief, full interpretations, JSON, and MOTD formats
 - **Changing line support** with transformation interpretations
 
+## Quick Start
+
+This tool provides three interfaces:
+
+- **[CLI Tool](#cli-usage)** - Command-line divination and interpretation
+- **[Goose Extension](#goose-extension-setup)** - MCP server for Goose AI assistant
+- **[Claude Code Plugin](#claude-code-setup)** - Native plugin for Claude Code
+
+All interfaces use the same binaries. Start with [Installation](#installation) below, then jump to your preferred interface.
+
 ## Installation
+
+This section covers installing the binaries needed for **all** interfaces (CLI, Goose, and Claude Code).
 
 ### Prerequisites
 
 - Rust 1.85.1 or later (for 2024 edition support)
 - Cargo (included with Rust)
 
-### Building
-#### Installing with crates.io (recommended)
+### Installing the Binaries
+
+#### Option 1: From crates.io (recommended)
 ```bash
 cargo install i-ching
 ```
 
-#### Building & Installing with Cargo
-
-For system-wide installation:
-
+#### Option 2: From source
 ```bash
-# Install directly from source
 git clone https://github.com/threemachines/i-ching.git
 cd i-ching
 cargo install --path .
 ```
 
-You should find `i-ching` in your PATH after refreshing your shell.
-
-#### Building Without Installing (alternate)
-
+#### Option 3: Build without installing (development)
 ```bash
 git clone https://github.com/threemachines/i-ching.git
 cd i-ching
 cargo build --release
 ```
 
-Binaries will be in your `./target/release/` directory.
+Binaries will be in `./target/release/` directory.
 
-### Binaries
-Any of the above methods creates two binaries:
+### Binaries Created
+
+All installation methods create two binaries:
 - `i-ching` - CLI tool
-- `i-ching-mcp-server` - MCP server for Goose
+- `i-ching-mcp-server` - MCP server for Goose and Claude Code
 
 The binaries include embedded data files, so they work anywhere without requiring external data files.
+
+### Verify PATH Configuration
+
+**Important for MCP usage (Goose & Claude Code)**: The `i-ching-mcp-server` binary must be in your PATH.
+
+Check if `~/.cargo/bin` is in your PATH:
+
+```bash
+echo $PATH | grep -q "$HOME/.cargo/bin" && echo "✓ Cargo bin is in PATH" || echo "✗ Cargo bin is NOT in PATH"
+```
+
+If it's **not** in your PATH, add it to your shell configuration:
+
+```bash
+# For zsh (macOS default)
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+
+# For bash
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bash_profile
+source ~/.bash_profile
+```
+
+**Note**: If you installed Rust via Homebrew (rather than rustup), `cargo install` still puts binaries in `~/.cargo/bin`, which may not be in your PATH by default.
 
 ## CLI Usage
 
@@ -122,14 +153,9 @@ i-ching --format motd --input 1
 
 ## Goose Extension Setup
 
-### 1. Build & Install the MCP Server
-To build & install the binary system-wide:
+**Prerequisites**: Complete [Installation](#installation) above first.
 
-```bash
-cargo install --path .
-```
-
-### 2. Enable in Goose
+### Enable in Goose
 
 1. Open Goose Desktop
 2. Go to **Extensions** (top-level menu item)
@@ -144,9 +170,73 @@ cargo install --path .
 5. Click **Save** to add the extension
 6. Enable the extension by toggling it on in the Extensions list
 
-### 4. Using in Goose
+### Using in Goose
 
 If the extension is enabled, Goose should be able to find and use it. The phrase "conduct a divination" or the keywords "augur" and "auspicious" seem to be enough in Claude models, while GPT seems to need you to more specifically namedrop the I Ching. (I would love more anecdata on how it works with different models - please open an issue or a PR modifying this README with your experiences.)
+
+## Claude Code Setup
+
+**Prerequisites**: Complete [Installation](#installation) above first, including the PATH verification step.
+
+This repository includes a Claude Code plugin configuration (`.claude-plugin/` and `.mcp.json`) that enables I Ching divination directly in Claude Code.
+
+### Load the Plugin
+
+Start Claude Code with the plugin directory flag:
+
+```bash
+claude --plugin-dir /path/to/i-ching
+```
+
+Or, if you cloned this repo to your home directory:
+
+```bash
+claude --plugin-dir ~/i-ching
+```
+
+### Grant Permissions
+
+On first use, Claude Code will ask for permission to:
+1. Load the plugin
+2. Use the MCP server tools (shown with a `plugin:i-ching:i-ching` prefix)
+
+This is normal security behavior. Grant both permissions to enable divination.
+
+### Using with Claude Code
+
+Once loaded, Claude Code can perform I Ching divinations. You can:
+- Ask for divination: "Please conduct an I Ching reading for me"
+- Request specific interpretations: "What does hexagram 1 mean?"
+- Use traditional language: "I need an augury about my travel preparations"
+
+The AI will automatically use the `cast_hexagram` tool to generate readings and `interpret_reading` to provide the complete Wilhelm-Baynes text and interpretation.
+
+### Troubleshooting
+
+**MCP server failed to start**
+
+If you see "1 MCP server failed" in Claude Code:
+
+1. Verify the binary is in your PATH (see [Installation - Verify PATH Configuration](#verify-path-configuration)):
+   ```bash
+   which i-ching-mcp-server
+   ```
+
+   If this returns "not found", you need to add `~/.cargo/bin` to your PATH.
+
+2. Verify the binary was installed:
+   ```bash
+   ls -la ~/.cargo/bin/i-ching-mcp-server
+   ```
+
+3. Check Claude Code debug logs:
+   ```bash
+   tail -100 ~/.claude/debug/latest | grep -i "i-ching\|mcp"
+   ```
+
+**Plugin not loading**
+
+Make sure you're using the `--plugin-dir` flag when starting Claude Code and pointing it to the directory containing `.claude-plugin/plugin.json`.
 
 ## MCP Server Usage
 

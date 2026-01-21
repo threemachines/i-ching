@@ -1,0 +1,6 @@
+{
+  "i-ching": {
+    "command": "i-ching-mcp-server",
+    "args": []
+  }
+}
